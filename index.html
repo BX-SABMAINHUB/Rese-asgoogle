@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Reseñas - Usuario</title>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: 'Segoe UI', sans-serif; background: #0f172a; color: #f8fafc; display: flex; justify-content: center; align-items: center; min-height: 100vh; }
+    .container { background: #1e293b; padding: 2rem; border-radius: 1rem; width: 100%; max-width: 420px; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5); }
+    h2 { margin-bottom: 1.5rem; font-weight: 600; }
+    input, button { width: 100%; padding: 0.75rem; margin: 0.5rem 0; border-radius: 0.5rem; border: none; font-size: 1rem; }
+    input { background: #0f172a; color: white; border: 1px solid #334155; }
+    button { background: #3b82f6; color: white; font-weight: 600; cursor: pointer; transition: background 0.2s; }
+    button:hover { background: #2563eb; }
+    .link { color: #94a3b8; margin-top: 0.5rem; text-align: center; cursor: pointer; }
+    .link:hover { text-decoration: underline; }
+    .balance-box { position: fixed; top: 1rem; right: 1rem; background: #1e293b; padding: 0.6rem 1.2rem; border-radius: 2rem; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.3); display: flex; align-items: center; gap: 0.5rem; }
+    .id-badge { background: #3b82f6; color: white; padding: 0.25rem 0.75rem; border-radius: 1rem; font-size: 0.8rem; font-weight: bold; }
+    .loader { text-align: center; padding: 1rem; color: #fbbf24; }
+    .notification { background: #ef4444; color: white; padding: 0.75rem; border-radius: 0.5rem; margin-bottom: 1rem; display: none; }
+    .hidden { display: none; }
+  </style>
+</head>
+<body>
+  <!-- Panel de autenticación -->
+  <div id="authPanel" class="container">
+    <h2 id="authTitle">Iniciar sesión</h2>
+    <input type="email" id="email" placeholder="Correo electrónico" autocomplete="email">
+    <input type="password" id="password" placeholder="Contraseña" autocomplete="current-password">
+    <button id="authBtn">Entrar</button>
+    <p class="link" id="toggleAuth">¿No tienes cuenta? Crear una</p>
+  </div>
+
+  <!-- Panel principal (solo visible tras login) -->
+  <div id="mainPanel" class="container hidden">
+    <div class="balance-box">
+      <span>💰</span> <span id="balanceDisplay">0.00€</span>
+      <span class="id-badge" id="userIdDisplay"></span>
+    </div>
+    <h2>Pegar reseña</h2>
+    <input type="text" id="reviewLink" placeholder="Enlace de Google Maps...">
+    <button id="submitReview">Continuar</button>
+    <div id="loader" class="loader hidden">Procesando reseña...</div>
+    <div id="successMsg" class="hidden" style="color:#4ade80; text-align:center; margin-top:0.5rem;">Enviado con éxito</div>
+    <div id="notification" class="notification">⚠️ La reseña no ha valido. Tu saldo se ha puesto a 0€.</div>
+    <button id="logoutBtn" style="background:#475569; margin-top:1rem;">Cerrar sesión</button>
+  </div>
+
+  <script>
+    // Configuración de Firebase
+    const firebaseConfig = {
+      apiKey: "AIzaSyD13N4-9MjTrmlPwGP7mves0Exje4v2ACw",
+      authDomain: "kahoot-8529e.firebaseapp.com",
+      databaseURL: "https://kahoot-8529e-default-rtdb.firebaseio.com",
+      projectId: "kahoot-8529e",
+      storageBucket: "kahoot-8529e.firebasestorage.app",
+      messagingSenderId: "313414356056",
+      appId: "1:313414356056:web:4aab4587f7df9393008e2d",
+      measurementId: "G-8T4CPC1BQ3"
+    };
+    firebase.initializeApp(firebaseConfig);
+    const auth = firebase.auth();
+    const db = firebase.database();
+
+    // UI Elements
+    const authPanel = document.getElementById('authPanel');
+    const mainPanel = document.getElementById('mainPanel');
+    const authTitle = document.getElementById('authTitle');
+    const authBtn = document.getElementById('authBtn');
+    const toggleAuth = document.getElementById('toggleAuth');
+    const emailInput = document.getElementById('email');
+    const passInput = document.getElementById('password');
+    const reviewLink = document.getElementById('reviewLink');
+    const submitBtn = document.getElementById('submitReview');
+    const loader = document.getElementById('loader');
+    const successMsg = document.getElementById('successMsg');
+    const balanceDisplay = document.getElementById('balanceDisplay');
+    const userIdDisplay = document.getElementById('userIdDisplay');
+    const notification = document.getElementById('notification');
+    const logoutBtn = document.getElementById('logoutBtn');
+
+    let isLogin = true;
+    let currentUser = null;
+    let userRef = null;
+
+    toggleAuth.addEventListener('click', () => {
+      isLogin = !isLogin;
+      authTitle.textContent = isLogin ? 'Iniciar sesión' : 'Crear cuenta';
+      authBtn.textContent = isLogin ? 'Entrar' : 'Registrarse';
+      toggleAuth.innerHTML = isLogin ? '¿No tienes cuenta? Crear una' : '¿Ya tienes cuenta? Inicia sesión';
+    });
+
+    authBtn.addEventListener('click', async () => {
+      const email = emailInput.value.trim();
+      const pass = passInput.value;
+      if (!email || !pass) return alert('Completa todos los campos');
+      try {
+        if (isLogin) {
+          await auth.signInWithEmailAndPassword(email, pass);
+        } else {
+          const cred = await auth.createUserWithEmailAndPassword(email, pass);
+          // Crear perfil con ID corto único
+          const uid = cred.user.uid;
+          const shortId = generateShortId();
+          await db.ref('users/' + uid).set({
+            email: email,
+            shortId: shortId,
+            balance: 0,
+            reviewCount: 0,
+            lastRejected: false
+          });
+        }
+      } catch (err) {
+        alert('Error: ' + err.message);
+      }
+    });
+
+    function generateShortId() {
+      const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+      let result = '';
+      for (let i = 0; i < 3; i++) result += chars.charAt(Math.floor(Math.random() * chars.length));
+      return result;
+    }
+
+    // Observador de autenticación
+    auth.onAuthStateChanged(user => {
+      if (user) {
+        currentUser = user;
+        userRef = db.ref('users/' + user.uid);
+        authPanel.classList.add('hidden');
+        mainPanel.classList.remove('hidden');
+        // Escuchar datos del usuario
+        userRef.on('value', snap => {
+          const data = snap.val();
+          if (data) {
+            balanceDisplay.textContent = data.balance.toFixed(2) + '€';
+            userIdDisplay.textContent = data.shortId || '???';
+            if (data.lastRejected === true) {
+              notification.style.display = 'block';
+              // Resetear el flag
+              userRef.update({ lastRejected: false });
+              setTimeout(() => notification.style.display = 'none', 8000);
+            }
+          }
+        });
+      } else {
+        currentUser = null;
+        if (userRef) userRef.off();
+        authPanel.classList.remove('hidden');
+        mainPanel.classList.add('hidden');
+      }
+    });
+
+    // Enviar reseña
+    submitBtn.addEventListener('click', async () => {
+      const link = reviewLink.value.trim();
+      if (!link) return alert('Pega el enlace de la reseña');
+      if (!currentUser) return;
+      loader.classList.remove('hidden');
+      successMsg.classList.add('hidden');
+      submitBtn.disabled = true;
+
+      // Guardar reseña pendiente
+      const newReviewRef = db.ref('reviews').push();
+      await newReviewRef.set({
+        userId: currentUser.uid,
+        link: link,
+        status: 'pending',
+        timestamp: Date.now()
+      });
+
+      // Simular 5 segundos de "pensar"
+      setTimeout(() => {
+        loader.classList.add('hidden');
+        successMsg.classList.remove('hidden');
+        submitBtn.disabled = false;
+        reviewLink.value = '';
+      }, 5000);
+    });
+
+    logoutBtn.addEventListener('click', () => auth.signOut());
+  </script>
+</body>
+</html>
