@@ -18,7 +18,7 @@
     button:hover { background: #2563eb; }
     .link { color: #94a3b8; margin-top: 0.5rem; text-align: center; cursor: pointer; }
     .link:hover { text-decoration: underline; }
-    .balance-box { position: fixed; top: 1rem; right: 1rem; background: #1e293b; padding: 0.6rem 1.2rem; border-radius: 2rem; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.3); display: flex; align-items: center; gap: 0.5rem; }
+    .balance-box { position: fixed; top: 1rem; right: 1rem; background: #1e293b; padding: 0.6rem 1.2rem; border-radius: 2rem; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.3); display: flex; align-items: center; gap: 0.5rem; z-index: 10; }
     .id-badge { background: #3b82f6; color: white; padding: 0.25rem 0.75rem; border-radius: 1rem; font-size: 0.8rem; font-weight: bold; }
     .loader { text-align: center; padding: 1rem; color: #fbbf24; }
     .notification { background: #ef4444; color: white; padding: 0.75rem; border-radius: 0.5rem; margin-bottom: 1rem; display: none; }
@@ -46,7 +46,7 @@
     <button id="submitReview">Continuar</button>
     <div id="loader" class="loader hidden">Procesando reseña...</div>
     <div id="successMsg" class="hidden" style="color:#4ade80; text-align:center; margin-top:0.5rem;">Enviado con éxito</div>
-    <div id="notification" class="notification">⚠️ La reseña no ha valido. Tu saldo se ha puesto a 0€.</div>
+    <div id="notification" class="notification">⚠️ La reseña no ha valido. (Tu saldo no se ha modificado)</div>
     <button id="logoutBtn" style="background:#475569; margin-top:1rem;">Cerrar sesión</button>
   </div>
 
@@ -103,7 +103,6 @@
           await auth.signInWithEmailAndPassword(email, pass);
         } else {
           const cred = await auth.createUserWithEmailAndPassword(email, pass);
-          // Crear perfil con ID corto único
           const uid = cred.user.uid;
           const shortId = generateShortId();
           await db.ref('users/' + uid).set({
@@ -141,7 +140,7 @@
             userIdDisplay.textContent = data.shortId || '???';
             if (data.lastRejected === true) {
               notification.style.display = 'block';
-              // Resetear el flag
+              // Resetear el flag, sin cambiar saldo
               userRef.update({ lastRejected: false });
               setTimeout(() => notification.style.display = 'none', 8000);
             }
